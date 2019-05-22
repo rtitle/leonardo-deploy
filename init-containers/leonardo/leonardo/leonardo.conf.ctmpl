@@ -1,0 +1,137 @@
+{{with $environment := env "ENVIRONMENT"}}
+{{with $runContext := env "RUN_CONTEXT"}}
+{{with $googleProj := env "GOOGLE_PROJ"}}
+{{with $instanceType := env "INSTANCE_TYPE"}}
+{{with $leoOAuthCredential := vault (printf "secret/dsde/firecloud/%s/leonardo/leonardo-oauth-credential.json" $environment)}}
+{{with $leoServiceAccount := vault (printf "secret/dsde/firecloud/%s/leonardo/leonardo-account.json" $environment)}}
+{{with $leoSecrets := vault (printf "secret/dsde/firecloud/%s/leonardo/secrets" $environment)}}
+{{with $leoWhitelist := vault (printf "secret/dsde/firecloud/%s/leonardo/whitelist.json" $environment)}}
+{{with $image := env "IMAGE"}}
+{{with $dnsDomain := env "DNS_DOMAIN"}}
+
+dataproc {
+  dataprocDefaultRegion = "us-central1"
+  leoGoogleProject = "{{$googleProj}}"
+  # We override the dataprocDockerImage set in reference.conf (that one forces prod)
+  dataprocDockerImage = "us.gcr.io/broad-dsp-gcr-public/leonardo-jupyter:{{$image}}"
+  clusterUrlBase = "{{if eq $environment "prod"}}https://notebooks.firecloud.org/notebooks/{{else}}https://leonardo.{{$dnsDomain}}/notebooks/{{end}}"
+}
+
+clusterFiles {
+  configFolderPath = "/etc/"
+  jupyterServerCrt = "jupyter-server.crt"
+  jupyterServerKey = "jupyter-server.key"
+  jupyterRootCaPem = "rootCA.pem"
+  jupyterRootCaKey = "rootCA.key"
+}
+
+mysql {
+  profile = "slick.jdbc.MySQLProfile$"
+  batchSize = 2000
+  db {
+    driver = "com.mysql.cj.jdbc.Driver"
+    url = {{if eq $runContext "fiab"}}"jdbc:mysql://mysql.{{$dnsDomain}}/leonardo?useSSL=false&rewriteBatchedStatements=true&nullNamePatternMatchesAll=true"{{else}}"jdbc:mysql://sqlproxy:3306/leonardo?rewriteBatchedStatements=true&nullNamePatternMatchesAll=true"{{end}}
+    user = "{{$leoSecrets.Data.db_user}}"
+    password = "{{$leoSecrets.Data.db_password}}"
+    connectionTimeout = 5000
+    numThreads = 50
+  }
+}
+
+proxy {
+  # Should match the jupyter wildcard cert
+  jupyterDomain = ".jupyter-{{$environment}}.firecloud.org"
+}
+
+swagger {
+  googleClientId = "{{$leoOAuthCredential.Data.web.client_id}}"
+  realm = "{{$googleProj}}"
+}
+
+sam {
+  server = "https://sam{{if eq $runContext "fiab"}}-fiab{{end}}.{{$dnsDomain}}:443"
+}
+
+akka {
+  loglevel = INFO
+
+  # Increased from the default of 3m to support long-lived websocket connections
+  # TODO: Jupyter should be injecting periodic pings to keep websocket connections alive.
+  # This doesn't seem to be happening in our case; need to figure out why. More info:
+  # https://github.com/jupyter/notebook/issues/1474
+  # https://github.com/jupyter/notebook/blob/master/notebook/base/zmqhandlers.py#L104
+  http {
+    server.idle-timeout = 60 seconds
+    client.idle-timeout = 60 seconds
+    client.connecting-timeout = 60 seconds
+    server.request-timeout = 60 seconds
+    parsing.max-content-length = 128m
+    server.websocket.periodic-keep-alive-max-idle = 30 seconds
+  }
+
+  ssl-config {
+    keyManager = {
+      stores = [
+        {
+          type = "PKCS12"
+          path = "/etc/leo-client.p12"
+          password = "{{$leoSecrets.Data.client_cert_password}}"
+        }
+      ]
+    }
+    trustManager = {
+      stores = [
+        {
+          type = "PEM"
+          path = "/etc/rootCA.pem"
+        },
+        {
+          # Default trust store
+          path: ${java.home}/lib/security/cacerts
+          password = "changeit"
+        }
+      ]
+    }
+  }
+}
+
+auth {
+  providerClass = "org.broadinstitute.dsde.workbench.leonardo.auth.sam.SamAuthProvider"
+  providerConfig {
+    samServer = ${sam.server}
+    # petTokenCacheEnabled is disabled in fiabs and alpha because it doesn't play nicely with gpalloc
+    petTokenCacheEnabled = {{if (or (eq $runContext "fiab") (eq $environment "alpha"))}}false{{else}}true{{end}}
+    petTokenCacheExpiryTime = 60 minutes
+    petTokenCacheMaxSize = 1000
+
+    notebookAuthCacheEnabled = true
+    notebookAuthCacheExpiryTime = 30 minutes
+    notebookAuthCacheMaxSize = 1000
+  }
+
+  # TODO remove this when we remove the FC UI whitelist
+  whitelistProviderConfig = {
+     whitelist = {{$leoWhitelist.Data.value}}
+  }
+}
+
+serviceAccounts {
+  providerClass = "org.broadinstitute.dsde.workbench.leonardo.auth.sam.PetClusterServiceAccountProvider"
+
+  # alternate provider: uses default compute SA to create cluster, then localizes pet SA on cluster to create notebooks
+  # providerClass = "org.broadinstitute.dsde.workbench.leonardo.auth.sam.PetNotebookServiceAccountProvider"
+
+  providerConfig {
+    leoServiceAccountEmail = "{{$leoServiceAccount.Data.client_email}}"
+    leoServiceAccountPemFile = "/etc/leonardo-account.pem"
+    leoServiceAccountJsonFile = "/etc/leonardo-account.json"
+    samServer = ${sam.server}
+    petTokenCacheExpiryTime = 60 minutes
+    petTokenCacheMaxSize = 1000
+  }
+}
+
+leoExecutionMode {
+  backLeo = {{if eq $instanceType "frontend"}}false{{else}}true{{end}}
+}
+{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}

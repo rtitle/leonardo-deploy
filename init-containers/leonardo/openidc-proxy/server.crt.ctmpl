@@ -1,0 +1,7 @@
+{{with $environment := env "ENVIRONMENT"}}
+{{if eq $environment "prod"}}
+{{with $commonSsl := vault (printf "secret/dsde/firecloud/%s/leonardo/notebooks.fc.org-server.crt" $environment)}}{{$commonSsl.Data.value}}{{end}}
+{{else}}
+{{with $commonSsl := vault (printf "secret/dsde/firecloud/%s/common/server.crt" $environment)}}{{$commonSsl.Data.value}}{{end}}
+{{end}}
+{{end}}
