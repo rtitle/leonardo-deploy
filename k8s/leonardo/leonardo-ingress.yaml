@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: leonardo-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "leonardo-solo-100-pub-ip"
+spec:
+  tls:
+    - hosts:
+      - leonardo-solo.dsde-dev.broadinstitute.org
+      secretName: wildcard.dsde-dev.broadinstitute.org
+  backend:
+    serviceName: leonardo-service
+    servicePort: http
+  rules:
+  - host: "leonardo-solo.dsde-dev.broadinstitute.org"
+    http:
+      paths:
+      - backend:
+          serviceName: leonardo-service
+          servicePort: http

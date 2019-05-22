@@ -1,0 +1,158 @@
+apiVersion: apps/v1 # Requires v1.9+ K8s node versions
+kind: Deployment
+metadata:
+  name: leonardo-deployment
+  labels:
+    app: leonardo
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      service: leonardo
+      environment: dev
+      project: leonardo-solo
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        service: leonardo 
+        environment: dev
+        project: leonardo-solo
+    spec:
+      serviceAccountName: leonardo-sa
+      initContainers:
+        - name: leonardo-config
+          image: us.gcr.io/broad-dsp-gcr-public/leonardo-config:rtitle-test # hmmmm
+          env:
+            - name: ENVIRONMENT
+              value: dev
+            - name: VAULT_TOKEN_FILE
+              value: /etc/vault/token
+            - name: RUN_CONTEXT
+              value: fiab
+            - name: HOST_TAG
+              value: fiab
+          volumeMounts:
+            - name: token
+              mountPath: /etc/vault
+            - name: appdir
+              mountPath: /working
+      containers:
+        - name: leonardo-app
+          image: broadinstitute/leonardo:xxxxxxx # TODO
+          command: [ "/etc/entrypoint.sh" ]
+          ports:
+            - containerPort: 8080
+              name: app-http
+          volumeMounts:
+            - mountPath: /etc/entrypoint.sh
+              name: appdir
+              subPath: leonardo/entrypoint.sh
+            - mountPath: /etc/leonardo.conf
+              name: appdir
+              subPath: leonardo/leonardo.conf
+            - mountPath: /etc/app.env
+              name: appdir
+              subPath: leonardo/app.env
+            - mountPath: /etc/leonardo-account.json
+              name: appdir
+              subPath: leonardo/leonardo-account.json
+            - mountPath: /etc/leonardo-account.pem
+              name: appdir
+              subPath: leonardo/leonardo-account.pem
+            - mountPath: /etc/jupyter-server.crt
+              name: appdir
+              subPath: leonardo/jupyter-server.crt
+            - mountPath: /etc/jupyter-server.key
+              name: appdir
+              subPath: leonardo/jupyter-server.key
+            - mountPath: /etc/leo-client.p12
+              name: appdir
+              subPath: leonardo/leo-client.p12
+            - mountPath: /etc/rootCA.key
+              name: appdir
+              subPath: leonardo/rootCA.key
+            - mountPath: /etc/rootCA.pem
+              name: appdir
+              subPath: leonardo/rootCA.pem
+            - mountPath: /etc/whitelist.json
+              name: appdir
+              subPath: leonardo/whitelist.json
+          readinessProbe:
+            httpGet:
+              path: /status #TODO /status or /?
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+        - name: companion
+          image: ubuntu
+          # To keep container running, see: https://stackoverflow.com/questions/31870222/how-can-i-keep-a-container-running-on-kubernetes
+          command: ["sh", "-c", "trap : TERM INT; (while true; do sleep 1000; done) & wait"]
+          volumeMounts:
+            - mountPath: /init_data
+              name: appdir
+        - name: leonardo-proxy
+          image: broadinstitute/openidc-proxy:bernick_tcell
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+          volumeMounts:
+            - mountPath: /etc/apache2/env-override
+              name: appdir
+              subPath: proxy/env-override
+#            - mountPath: /etc/apache2/sites-enabled/mod_security_logging.conf
+#              name: appdir
+#              subPath: proxy/mod_security_logging.conf
+            - mountPath: /etc/apache2/sites-available/site.conf
+              name: appdir
+              subPath: proxy/site.conf
+            - mountPath: /etc/apache2/override.sh
+              name: appdir
+              subPath: proxy/override.sh
+            # TODO: why commented? don't we need these?
+#            - mountPath: /etc/ssl/certs/server.crt
+#              name: appdir
+#              subPath: proxy/server.crt
+#            - mountPath: /etc/ssl/private/server.key
+#              name: appdir
+#              subPath: proxy/server.key
+#            - mountPath: /etc/ssl/certs/ca-bundle.crt
+#              name: appdir
+#              subPath: proxy/ca-bundle.crt
+#            - mountPath: /etc/apache2/tcell_agent.config
+#              name: appdir
+#              subPath: proxy/tcell_agent.config
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        #  vault secret
+        - name: token
+          secret:
+            secretName: token
+            items:
+              - key: token
+                path: token
+                mode: 0444
+        #  emptyDir used to access all configs
+        - name: appdir
+          emptyDir: {}
