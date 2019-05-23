@@ -1,0 +1,34 @@
+{
+  "name": "leonardo",
+  "intent": "Notebooks Service",
+  "production": false,
+  "stability": "volatile",
+  "environments": {
+    "default": {
+      "name": "dev"
+    }
+  },
+  "projects": {
+    "default": {
+      "name": "broad-dsde-dev"
+    }
+  },
+  "regions": {
+    "default": {
+      "name": "us-central1",
+      "zone_name": "us-central1-a"
+    }
+  },
+  "dns": {
+    "default": {
+      "name": "dsde-dev-broad",
+      "zone": "dsde-dev.broadinstitute.org"
+    }
+  },
+  "clusters": {
+    "default": {
+      "name": "gke_broad-dsde-dev_us-central1-a_firecloud-k8s",
+      "nick": "vault-prod"
+    }
+  }
+}
