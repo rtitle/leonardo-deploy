@@ -17,5 +17,9 @@ then
    .  "${ENVFILE}"
 fi
 
+# base64 decode the leo-client.p12.b64 file
+# TODO remove when we upgrade consul template and can use their `base64Decode` function
+base64 -D /etc/leo-client.p12.b64 > /etc/leo-client.p12
+
 # exec startup as normal
 exec java $JAVA_OPTS -jar $(find /leonardo -name 'leonardo*.jar')

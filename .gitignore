@@ -4,4 +4,4 @@
 testUser.ldif
 tls.crt
 tls.key
-/k8s/*/rendered
+rendered
