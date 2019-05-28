@@ -10,7 +10,8 @@
   },
   "projects": {
     "default": {
-      "name": "broad-dsde-dev"
+      "name": "broad-dsde-dev",
+      "provider_sa_path": "secret/dsde/firecloud/dev/leonardo/leonardo-account.json"
     }
   },
   "regions": {

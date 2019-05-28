@@ -41,7 +41,7 @@ spec:
               mountPath: /working
       containers:
         - name: leonardo-app
-          image: broadinstitute/leonardo:xxxxxxx # TODO
+          image: gcr.io/broad-dsp-gcr-public/leonardo:da1ad70ce411
           command: [ "/etc/entrypoint.sh" ]
           ports:
             - containerPort: 8080
@@ -104,7 +104,7 @@ spec:
             - mountPath: /init_data
               name: appdir
         - name: leonardo-proxy
-          image: broadinstitute/openidc-proxy:bernick_tcell
+          image: broadinstitute/openidc-proxy:tcell
           ports:
             - containerPort: 80
               name: http
